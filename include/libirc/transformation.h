@@ -122,6 +122,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   for (; n_iterations < max_iters; n_iterations++) {
     // Restrain change in dihedral angle on the interval (-pi,pi]
     for (std::size_t i{offset}; i < offset + dihedrals.size(); i++) {
+      std::cout << "pirange_rad " << i << std::endl;
       dq(i) = tools::math::pirange_rad(dq(i));
     }
     // Displacement in cartesian coordinates
