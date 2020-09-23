@@ -242,12 +242,11 @@ Matrix pseudo_inverse(const Matrix& mat) {
       std::max(mat.cols(), mat.rows()) *
       svd.singularValues().array().abs().maxCoeff();
 
-  Eigen::Matrix result =
-      svd.matrixV() *
-      Matrix((svd.singularValues().array().abs() > tolerance)
-                 .select(svd.singularValues().array().inverse(), 0))
-          .asDiagonal() *
-      svd.matrixU().adjoint();
+  Matrix result = svd.matrixV() *
+                  Matrix((svd.singularValues().array().abs() > tolerance)
+                             .select(svd.singularValues().array().inverse(), 0))
+                      .asDiagonal() *
+                  svd.matrixU().adjoint();
   return result;
 #else
 #error
