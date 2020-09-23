@@ -276,9 +276,9 @@ public:
     // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
     typename Matrix::Scalar tolerance =
         std::numeric_limits<double>::epsilon() *
-        std::max(mat.cols(), mat.rows()) *
-        svd.singularValues().array().abs().maxCoeff();
-    svd_.setTolerance(tolerance);
+        std::max(matrix.cols(), matrix.rows()) *
+        svd_.singularValues().array().abs().maxCoeff();
+    svd_.setThreshold(tolerance);
   }
 
   Vector solve(const Vector& rhs) { return svd_.solve(rhs); }
