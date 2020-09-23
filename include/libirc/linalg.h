@@ -263,7 +263,6 @@ class Solver {
 #ifdef HAVE_ARMA
 public:
   Solver(const Matrix& matrix) : matrix_(arma::pinv(matrix)) {}
-  return mat.completeOrthogonalDecomposition().pseudoInverse();
 
   Vector solve(const Vector& rhs) { return invMatrix_ * rhs; }
 
@@ -272,7 +271,15 @@ private:
 #elif HAVE_EIGEN3
 public:
   Solver(const Matrix& matrix)
-    : svd_(matrix.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV)) {}
+    : svd_(matrix.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV)) {
+    // Tolerance suggested in pinv() method in armadillo and
+    // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
+    typename Matrix::Scalar tolerance =
+        std::numeric_limits<double>::epsilon() *
+        std::max(mat.cols(), mat.rows()) *
+        svd.singularValues().array().abs().maxCoeff();
+    svd_.setTolerance(tolerance);
+  }
 
   Vector solve(const Vector& rhs) { return svd_.solve(rhs); }
 
