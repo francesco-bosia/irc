@@ -10,6 +10,7 @@
 #else
 #error
 #endif
+#include <iostream>
 
 namespace irc {
 
@@ -230,11 +231,57 @@ Matrix pseudo_inverse(const Matrix& mat) {
 #ifdef HAVE_ARMA
   return arma::pinv(mat);
 #elif HAVE_EIGEN3
-  return mat.completeOrthogonalDecomposition().pseudoInverse();
+  std::cout << "Calculating pseudoinverse" << std::endl;
+  Eigen::BDCSVD<Matrix> svd =
+      mat.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+  // Tolerance suggested in pinv() method in armadillo and
+  // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
+  typename Matrix::Scalar tolerance =
+      std::numeric_limits<double>::epsilon() *
+      std::max(mat.cols(), mat.rows()) *
+      svd.singularValues().array().abs().maxCoeff();
+
+  return svd.matrixV() *
+         Matrix((svd.singularValues().array().abs() > tolerance)
+                    .select(svd.singularValues().array().inverse(), 0))
+             .asDiagonal() *
+         svd.matrixU().adjoint();
 #else
 #error
 #endif
 }
+
+/// A Solver object for a linear system.
+///
+/// \tparam Matrix
+/// \tparam Vector
+/// \param mat Matrix
+/// \return Pseudo-inverse of \param mat
+template<typename Matrix, typename Vector>
+class Solver {
+#ifdef HAVE_ARMA
+public:
+  Solver(const Matrix& matrix) : matrix_(arma::pinv(matrix)) {}
+  return mat.completeOrthogonalDecomposition().pseudoInverse();
+
+  Vector solve(const Vector& rhs) { return invMatrix_ * rhs; }
+
+private:
+  const Matrix& invMatrix_;
+#elif HAVE_EIGEN3
+public:
+  Solver(const Matrix& matrix)
+    : svd_(matrix.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV)) {}
+
+  Vector solve(const Vector& rhs) { return svd_.solve(rhs); }
+
+private:
+  Eigen::BDCSVD<Matrix> svd_;
+#else
+#error
+#endif
+};
 
 } // namespace linalg
 

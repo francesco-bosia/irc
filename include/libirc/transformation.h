@@ -33,7 +33,9 @@ double rms(const Vector& v) {
 /// \return Gradient in internal redundant coordinates
 template<typename Vector, typename Matrix>
 Vector gradient_cartesian_to_irc(const Vector& grad_c, const Matrix& B) {
-  return linalg::pseudo_inverse(linalg::transpose(B)) * grad_c;
+  linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
+
+  return solver.solve(grad_c);
 }
 
 // TODO: Avoid transpose?
@@ -106,7 +108,8 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
       x_c, bonds, angles, dihedrals, linear_angles, out_of_plane_bends)};
 
   // Transpose of B
-  const Matrix iB{linalg::pseudo_inverse(B)};
+  // const Matrix iB{linalg::pseudo_inverse(B)};
+  linalg::Solver<Matrix, Vector> solver(B);
 
   double RMS{0};
 
@@ -120,7 +123,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
       dq(i) = tools::math::pirange_rad(dq(i));
     }
     // Displacement in cartesian coordinates
-    dx = iB * dq;
+    dx = solver.solve(dq);
 
     // Check for convergence
     RMS = rms<Vector>(dx);
@@ -149,7 +152,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // If iteration does not converge, use first estimate
   if (!converged) {
     // Compute first estimate
-    x_c = x_c_old + iB * dq_irc;
+    x_c = x_c_old + solver.solve(dq_irc);
   }
 
   return {x_c, converged, n_iterations};
