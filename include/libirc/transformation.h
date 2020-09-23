@@ -109,7 +109,9 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
 
   // Transpose of B
   // const Matrix iB{linalg::pseudo_inverse(B)};
+  std::cout << "Before solver" << std::endl;
   linalg::Solver<Matrix, Vector> solver(B);
+  std::cout << "After solver" << std::endl;
 
   double RMS{0};
 
@@ -123,6 +125,8 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
       dq(i) = tools::math::pirange_rad(dq(i));
     }
     // Displacement in cartesian coordinates
+    std::cout << "Iteration " << n_iterations << " after dihedral adaptation"
+              << std::endl;
     dx = solver.solve(dq);
 
     // Check for convergence
