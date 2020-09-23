@@ -33,9 +33,9 @@ double rms(const Vector& v) {
 /// \return Gradient in internal redundant coordinates
 template<typename Vector, typename Matrix>
 Vector gradient_cartesian_to_irc(const Vector& grad_c, const Matrix& B) {
-  // linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
+  linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
 
-  return linalg::pseudo_inverse(linalg::transpose(B)) * grad_c;
+  return solver.solve(grad_c);
 }
 
 // TODO: Avoid transpose?
@@ -110,7 +110,8 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // Transpose of B
   // const Matrix iB{linalg::pseudo_inverse(B)};
   std::cout << "Before solver" << std::endl;
-  linalg::Solver<Matrix, Vector> solver(B);
+  // linalg::Solver<Matrix, Vector> solver(B);
+  Matrix invB = linalg::pseudo_inverse(B);
   std::cout << "After solver" << std::endl;
 
   double RMS{0};
@@ -128,7 +129,8 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
     // Displacement in cartesian coordinates
     std::cout << "Iteration " << n_iterations << " after dihedral adaptation"
               << std::endl;
-    dx = solver.solve(dq);
+    // dx = solver.solve(dq);
+    dx = invB * dq;
 
     // Check for convergence
     RMS = rms<Vector>(dx);
@@ -157,7 +159,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // If iteration does not converge, use first estimate
   if (!converged) {
     // Compute first estimate
-    x_c = x_c_old + solver.solve(dq_irc);
+    x_c = x_c_old + invB * dq_irc;
   }
 
   return {x_c, converged, n_iterations};
