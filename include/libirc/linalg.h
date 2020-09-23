@@ -232,8 +232,8 @@ Matrix pseudo_inverse(const Matrix& mat) {
   return arma::pinv(mat);
 #elif HAVE_EIGEN3
   std::cout << "Calculating pseudoinverse" << std::endl;
-  Eigen::BDCSVD<Matrix> svd =
-      mat.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
+  Eigen::JacobiSVD<Matrix> svd =
+      mat.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
 
   // Tolerance suggested in pinv() method in armadillo and
   // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
@@ -242,11 +242,13 @@ Matrix pseudo_inverse(const Matrix& mat) {
       std::max(mat.cols(), mat.rows()) *
       svd.singularValues().array().abs().maxCoeff();
 
-  return svd.matrixV() *
-         Matrix((svd.singularValues().array().abs() > tolerance)
-                    .select(svd.singularValues().array().inverse(), 0))
-             .asDiagonal() *
-         svd.matrixU().adjoint();
+  Eigen::Matrix result =
+      svd.matrixV() *
+      Matrix((svd.singularValues().array().abs() > tolerance)
+                 .select(svd.singularValues().array().inverse(), 0))
+          .asDiagonal() *
+      svd.matrixU().adjoint();
+  return result;
 #else
 #error
 #endif
