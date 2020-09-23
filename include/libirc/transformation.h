@@ -33,9 +33,9 @@ double rms(const Vector& v) {
 /// \return Gradient in internal redundant coordinates
 template<typename Vector, typename Matrix>
 Vector gradient_cartesian_to_irc(const Vector& grad_c, const Matrix& B) {
-  linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
+  // linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
 
-  return solver.solve(grad_c);
+  return linalg::pseudo_inverse(linalg::transpose(B)) * grad_c;
 }
 
 // TODO: Avoid transpose?
