@@ -110,6 +110,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
 
   // Transpose of B
   linalg::Solver<Matrix, Vector> solver(B);
+  //Matrix invB = linalg::pseudo_inverse(B);
 
   double RMS{0};
 
@@ -124,6 +125,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
     }
     // Displacement in cartesian coordinates
     dx = solver.solve(dq);
+    //dx = invB * dq;
 
     // Check for convergence
     RMS = rms<Vector>(dx);
@@ -152,6 +154,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // If iteration does not converge, use first estimate
   if (!converged) {
     // Compute first estimate
+    //x_c = x_c_old + invB * dq_irc;
     x_c = x_c_old + solver.solve(dq_irc);
   }
 
