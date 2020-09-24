@@ -33,9 +33,10 @@ double rms(const Vector& v) {
 /// \return Gradient in internal redundant coordinates
 template<typename Vector, typename Matrix>
 Vector gradient_cartesian_to_irc(const Vector& grad_c, const Matrix& B) {
-  linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
-
-  return solver.solve(grad_c);
+  //  linalg::Solver<Vector, Matrix> solver(linalg::transpose(B));
+  //
+  //  return solver.solve(grad_c);
+  return linalg::pseudo_inverse(linalg::transpose(B)) * grad_c;
 }
 
 // TODO: Avoid transpose?
@@ -108,11 +109,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
       x_c, bonds, angles, dihedrals, linear_angles, out_of_plane_bends)};
 
   // Transpose of B
-  // const Matrix iB{linalg::pseudo_inverse(B)};
-  std::cout << "Before solver" << std::endl;
-  // linalg::Solver<Matrix, Vector> solver(B);
-  Matrix invB = linalg::pseudo_inverse(B);
-  std::cout << "After solver" << std::endl;
+  linalg::Solver<Matrix, Vector> solver(B);
 
   double RMS{0};
 
@@ -123,14 +120,10 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   for (; n_iterations < max_iters; n_iterations++) {
     // Restrain change in dihedral angle on the interval (-pi,pi]
     for (std::size_t i{offset}; i < offset + dihedrals.size(); i++) {
-      std::cout << "pirange_rad " << i << std::endl;
       dq(i) = tools::math::pirange_rad(dq(i));
     }
     // Displacement in cartesian coordinates
-    std::cout << "Iteration " << n_iterations << " after dihedral adaptation"
-              << std::endl;
-    // dx = solver.solve(dq);
-    dx = invB * dq;
+    dx = solver.solve(dq);
 
     // Check for convergence
     RMS = rms<Vector>(dx);
@@ -159,7 +152,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // If iteration does not converge, use first estimate
   if (!converged) {
     // Compute first estimate
-    x_c = x_c_old + invB * dq_irc;
+    x_c = x_c_old + solver.solve(dq_irc);
   }
 
   return {x_c, converged, n_iterations};

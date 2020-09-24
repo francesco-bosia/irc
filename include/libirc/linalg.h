@@ -6,7 +6,9 @@
 #elif HAVE_EIGEN3
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/LU>
+#include <unsupported/Eigen/IterativeSolvers>
 #else
 #error
 #endif
@@ -232,33 +234,25 @@ Matrix pseudo_inverse(const Matrix& mat) {
   return arma::pinv(mat);
 #elif HAVE_EIGEN3
   std::cout << "Calculating pseudoinverse" << std::endl;
-  Eigen::JacobiSVD<Matrix> svd =
-      mat.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV);
-
-  // Tolerance suggested in pinv() method in armadillo and
-  // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
-  typename Matrix::Scalar tolerance =
-      std::numeric_limits<double>::epsilon() *
-      std::max(mat.cols(), mat.rows()) *
-      svd.singularValues().array().abs().maxCoeff();
-
-  Matrix result = svd.matrixV() *
-                  Matrix((svd.singularValues().array().abs() > tolerance)
-                             .select(svd.singularValues().array().inverse(), 0))
-                      .asDiagonal() *
-                  svd.matrixU().adjoint();
-  return result;
+  return mat.completeOrthogonalDecomposition().pseudoInverse();
 #else
 #error
 #endif
 }
 
-/// A Solver object for a linear system.
+/// Class: A Solver object for a linear system.
+/// This object allows to solve the problem Ax=b,
+/// and does so by computing the pseudo inverse in
+/// armadillo or by solving iteratively the problem
+/// with the LeastSquaresConjugateGradient method in Eigen.
+/// The CompleteOrthogonalDecomposition is a bit faster,
+/// but the geometry optimization seems to require more iterations.
+/// Comparing the 2 with the same geometry optimizer optimizing a
+/// 55 atoms molecule very tightly, COD takes 356 cycles, LSCG 312.
 ///
 /// \tparam Matrix
 /// \tparam Vector
 /// \param mat Matrix
-/// \return Pseudo-inverse of \param mat
 template<typename Matrix, typename Vector>
 class Solver {
 #ifdef HAVE_ARMA
@@ -268,24 +262,30 @@ public:
   Vector solve(const Vector& rhs) { return invMatrix_ * rhs; }
 
 private:
-  const Matrix& invMatrix_;
+  const Matrix invMatrix_;
 #elif HAVE_EIGEN3
 public:
-  Solver(const Matrix& matrix)
-    : svd_(matrix.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV)) {
-    // Tolerance suggested in pinv() method in armadillo and
-    // in https://eigen.tuxfamily.org/bz/show_bug.cgi?id=257 here.
-    typename Matrix::Scalar tolerance =
-        std::numeric_limits<double>::epsilon() *
-        std::max(matrix.cols(), matrix.rows()) *
-        svd_.singularValues().array().abs().maxCoeff();
-    svd_.setThreshold(tolerance);
+  Solver(const Matrix& matrix) {
+    lscg_ =
+        std::make_unique<Eigen::LeastSquaresConjugateGradient<Matrix>>(matrix);
+  } // : cod_(matrix.completeOrthogonalDecomposition()) {}
+
+  // Vector solve(const Vector& rhs) { return cod_.solve(rhs); }
+  Vector solve(const Vector& rhs) {
+    Vector result;
+    if (guess_)
+      result = lscg_->solveWithGuess(rhs, *guess_);
+    else {
+      result = lscg_->solve(rhs);
+      guess_ = std::make_unique<Vector>(result);
+    }
+    return result;
   }
 
-  Vector solve(const Vector& rhs) { return svd_.solve(rhs); }
-
 private:
-  Eigen::BDCSVD<Matrix> svd_;
+  // Eigen::CompleteOrthogonalDecomposition<Matrix> cod_;
+  std::unique_ptr<Eigen::LeastSquaresConjugateGradient<Matrix>> lscg_;
+  std::unique_ptr<Vector> guess_;
 #else
 #error
 #endif
