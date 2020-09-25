@@ -128,6 +128,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
     }
     // Displacement in cartesian coordinates
     dx = solver.solve(dq);
+    std::cout << dx.transpose() << std::endl;
     // dx = invB * dq;
 
     // Check for convergence
