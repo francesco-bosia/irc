@@ -77,7 +77,10 @@ struct IrcToCartesianResult {
 ///
 /// Since Cartesian coordinates are rectilinear and the internal coordinates are
 /// curvilinear, the transformation must be done iteratively.
-template<typename Vector3, typename Vector, typename Matrix>
+template<typename Vector3,
+         typename Vector,
+         typename Matrix,
+         typename SolverType>
 IrcToCartesianResult<Vector> irc_to_cartesian_single(
     const Vector& q_irc_old,
     const Vector& dq_irc,
@@ -109,8 +112,8 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
       x_c, bonds, angles, dihedrals, linear_angles, out_of_plane_bends)};
 
   // Transpose of B
-  linalg::Solver<Matrix, Vector> solver(B);
-  //Matrix invB = linalg::pseudo_inverse(B);
+  SolverType solver(B);
+  // Matrix invB = linalg::pseudo_inverse(B);
 
   double RMS{0};
 
@@ -125,7 +128,7 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
     }
     // Displacement in cartesian coordinates
     dx = solver.solve(dq);
-    //dx = invB * dq;
+    // dx = invB * dq;
 
     // Check for convergence
     RMS = rms<Vector>(dx);
@@ -154,14 +157,17 @@ IrcToCartesianResult<Vector> irc_to_cartesian_single(
   // If iteration does not converge, use first estimate
   if (!converged) {
     // Compute first estimate
-    //x_c = x_c_old + invB * dq_irc;
+    // x_c = x_c_old + invB * dq_irc;
     x_c = x_c_old + solver.solve(dq_irc);
   }
 
   return {x_c, converged, n_iterations};
 }
 
-template<typename Vector3, typename Vector, typename Matrix>
+template<typename Vector3,
+         typename Vector,
+         typename Matrix,
+         typename SolverType = linalg::Solver<Matrix, Vector>>
 IrcToCartesianResult<Vector> irc_to_cartesian(
     const Vector& q_irc_old,
     const Vector& dq_irc,
@@ -176,16 +182,17 @@ IrcToCartesianResult<Vector> irc_to_cartesian(
     const std::size_t max_bisects = 6) {
 
   const auto result =
-      irc_to_cartesian_single<Vector3, Vector, Matrix>(q_irc_old,
-                                                       dq_irc,
-                                                       x_c_old,
-                                                       bonds,
-                                                       angles,
-                                                       dihedrals,
-                                                       linear_angles,
-                                                       out_of_plane_bends,
-                                                       max_iters,
-                                                       tolerance);
+      irc_to_cartesian_single<Vector3, Vector, Matrix, SolverType>(
+          q_irc_old,
+          dq_irc,
+          x_c_old,
+          bonds,
+          angles,
+          dihedrals,
+          linear_angles,
+          out_of_plane_bends,
+          max_iters,
+          tolerance);
 
   if (result.converged) {
     return result;
@@ -199,18 +206,21 @@ IrcToCartesianResult<Vector> irc_to_cartesian(
 
     IrcToCartesianResult<Vector> partial_step;
     for (std::size_t j = 0; j < n_divs; ++j) {
-      partial_step =
-          irc_to_cartesian<Vector3, Vector, Matrix>(q_irc_old + j * dq_irc_part,
-                                                    dq_irc_part,
-                                                    x_c_start,
-                                                    bonds,
-                                                    angles,
-                                                    dihedrals,
-                                                    linear_angles,
-                                                    out_of_plane_bends,
-                                                    max_iters,
-                                                    tolerance,
-                                                    max_bisects - 1);
+      partial_step = irc_to_cartesian<Vector3,
+                                      Vector,
+                                      Matrix,
+                                      linalg::RobustSolver<Matrix, Vector>>(
+          q_irc_old + j * dq_irc_part,
+          dq_irc_part,
+          x_c_start,
+          bonds,
+          angles,
+          dihedrals,
+          linear_angles,
+          out_of_plane_bends,
+          max_iters,
+          tolerance,
+          max_bisects - 1);
 
       // Update starting cartesian for next iteration
       x_c_start = partial_step.x_c;

@@ -244,9 +244,9 @@ Matrix pseudo_inverse(const Matrix& mat) {
       svd.singularValues().array().abs().maxCoeff();
   svd.setThreshold(tolerance);
 
-   //Matrix result = svd.matrixV() * Matrix( (svd.singularValues().array().abs()
-   //> /*tolerance*/ 1.0e-10).select(svd.singularValues(). array().inverse(), 0)
-   //).asDiagonal() * svd.matrixU().adjoint();
+  // Matrix result = svd.matrixV() * Matrix( (svd.singularValues().array().abs()
+  //> /*tolerance*/ 1.0e-10).select(svd.singularValues(). array().inverse(), 0)
+  //).asDiagonal() * svd.matrixU().adjoint();
   return svd.solve(Matrix::Identity(mat.rows(), mat.rows()));
   // return cod.pseudoInverse();
 #else
@@ -284,19 +284,21 @@ public:
   Eigen::Index cols() const { return matTmat_.cols(); }
 
   template<typename Rhs>
-  Eigen::Product<MatrixReplacement,Rhs,Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs>& x) const {
-    return Eigen::Product<MatrixReplacement,Rhs,Eigen::AliasFreeProduct>(*this, x.derived());
+  Eigen::Product<MatrixReplacement, Rhs, Eigen::AliasFreeProduct>
+  operator*(const Eigen::MatrixBase<Rhs>& x) const {
+    return Eigen::Product<MatrixReplacement, Rhs, Eigen::AliasFreeProduct>(
+        *this, x.derived());
   }
 
   MatrixReplacement() = default;
   MatrixReplacement(const Eigen::MatrixXd& matrix) : mat_(matrix) {
-  matTmat_ = matrix.transpose() * matrix;
-  matTmat_ = 0.5 * (matTmat_ + matTmat_.transpose());
+    matTmat_ = matrix.transpose() * matrix;
+    matTmat_ = 0.5 * (matTmat_ + matTmat_.transpose());
   }
 
   void addRegularizationFactor(double regFactor) { regFactor_ = regFactor; }
-  const Eigen::MatrixXd& mTm() const {return matTmat_;}
-  double regularization() const {return regFactor_;}
+  const Eigen::MatrixXd& mTm() const { return matTmat_; }
+  double regularization() const { return regFactor_; }
 
 private:
   Eigen::MatrixXd mat_, matTmat_;
@@ -317,9 +319,10 @@ struct generic_product_impl<irc::linalg::MatrixReplacement,
                             DenseShape,
                             DenseShape,
                             GemvProduct> // GEMV stands for matrix-vector
-  : generic_product_impl_base<irc::linalg::MatrixReplacement,
-                              Rhs,
-                              generic_product_impl<irc::linalg::MatrixReplacement, Rhs>> {
+  : generic_product_impl_base<
+        irc::linalg::MatrixReplacement,
+        Rhs,
+        generic_product_impl<irc::linalg::MatrixReplacement, Rhs>> {
   typedef typename Product<irc::linalg::MatrixReplacement, Rhs>::Scalar Scalar;
 
   template<typename Dest>
@@ -369,35 +372,72 @@ private:
 #elif HAVE_EIGEN3
 public:
   Solver(const Matrix& matrix)
-    : tMatrix_(matrix.transpose()), m_(tMatrix_ * matrix), matRep_(matrix) {
-    gmres_ = std::make_unique<Eigen::ConjugateGradient<MatrixReplacement, Eigen::Upper|Eigen::Lower, Eigen::IdentityPreconditioner>>();
-    matRep_.addRegularizationFactor(5e-6);
-    gmres_->compute(matRep_);
-  }
-  //: cod_(matrix.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV)) {
-  //    typename Matrix::Scalar tolerance =
-  //    std::numeric_limits<double>::epsilon() * std::max(matrix.cols(),
-  //    matrix.rows()) * cod_.singularValues().array().abs().maxCoeff();
-  //    cod_.setThreshold(tolerance);
-  //}
+    : cod_(matrix.completeOrthogonalDecomposition()) {}
 
-  // Vector solve(const Vector& rhs) { return cod_.solve(rhs); }
+  Vector solve(const Vector& rhs) { return cod_.solve(rhs); }
+
+private:
+  Eigen::CompleteOrthogonalDecomposition<Matrix> cod_;
+#else
+#error
+#endif
+};
+
+/// Class: A Solver object for a linear system.
+/// This object allows to solve the problem Ax=b,
+/// and does so by computing the pseudo inverse in
+/// armadillo or by solving iteratively the problem
+/// with the LeastSquaresConjugateGradient method in Eigen.
+/// The CompleteOrthogonalDecomposition is a bit faster,
+/// but the geometry optimization seems to require more iterations.
+/// Comparing the 2 with the same geometry optimizer optimizing a
+/// 55 atoms molecule very tightly, COD takes 356 cycles, LSCG 312.
+///
+/// \tparam Matrix
+/// \tparam Vector
+/// \param mat Matrix
+template<typename Matrix, typename Vector>
+class RobustSolver {
+#ifdef HAVE_ARMA
+public:
+  RobustSolver(const Matrix& matrix) : matrix_(arma::pinv(matrix)) {}
+
+  Vector solve(const Vector& rhs) { return invMatrix_ * rhs; }
+
+private:
+  const Matrix invMatrix_;
+#elif HAVE_EIGEN3
+public:
+  RobustSolver(const Matrix& matrix)
+    : tMatrix_(matrix.transpose()), matRep_(matrix) {
+    cg_ = std::make_unique<
+        Eigen::ConjugateGradient<MatrixReplacement,
+                                 Eigen::Upper | Eigen::Lower,
+                                 Eigen::IdentityPreconditioner>>();
+    matRep_.addRegularizationFactor(5e-6);
+    cg_->compute(matRep_);
+  }
+
   Vector solve(const Vector& rhs) {
     Vector result;
     if (guess_)
-      result = gmres_->solveWithGuess(tMatrix_ * rhs, *guess_);
+      result = cg_->solveWithGuess(tMatrix_ * rhs, *guess_);
     else {
-      result = gmres_->solve(tMatrix_ * rhs);
+      result = cg_->solve(tMatrix_ * rhs);
       guess_ = std::make_unique<Vector>(result);
     }
+    std::cout << "Iterations: " << cg_->iterations() << std::endl;
+    std::cout << "Error: " << cg_->error() << std::endl;
     return result;
   }
 
 private:
-  // Eigen::JacobiSVD<Matrix> cod_;
-  std::unique_ptr<Eigen::ConjugateGradient<MatrixReplacement, Eigen::Upper | Eigen::Lower, Eigen::IdentityPreconditioner>> gmres_;
+  std::unique_ptr<Eigen::ConjugateGradient<MatrixReplacement,
+                                           Eigen::Upper | Eigen::Lower,
+                                           Eigen::IdentityPreconditioner>>
+      cg_;
+  Matrix tMatrix_;
   MatrixReplacement matRep_;
-  Matrix tMatrix_, m_;
   std::unique_ptr<Vector> guess_;
 #else
 #error
